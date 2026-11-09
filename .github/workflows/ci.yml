@@ -1,5 +1,8 @@
 name: Validate
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
@@ -17,5 +20,7 @@ jobs:
           node --check workflow.js
           node --check runner.js
           node --check public/app.js
+          node --check deploy/hosted-demo.js
+          node --check scripts/build.mjs
       - run: npm test
       - run: npm run build

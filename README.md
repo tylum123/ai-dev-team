@@ -1,5 +1,9 @@
 # AI Dev Team
 
+Hosted demo: https://ai-dev-team-olive.vercel.app
+
+Source repository: https://github.com/tylum123/ai-dev-team
+
 Local MVP: task → bounded context → exact-match patches → isolated quality gates → diff → manual draft PR approval.
 
 ## Run
