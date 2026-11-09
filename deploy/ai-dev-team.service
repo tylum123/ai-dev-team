@@ -1,0 +1,26 @@
+[Unit]
+Description=AI Dev Team
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ai-dev-team
+Group=ai-dev-team
+WorkingDirectory=/opt/ai-dev-team
+Environment=NODE_ENV=production
+Environment=PORT=4310
+Environment=HOME=/var/lib/ai-dev-team
+EnvironmentFile=-/etc/ai-dev-team.env
+ExecStart=/usr/bin/node /opt/ai-dev-team/server.js
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/ai-dev-team/.data /var/lib/ai-dev-team
+
+[Install]
+WantedBy=multi-user.target

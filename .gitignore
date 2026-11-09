@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+.data/
+*.log
+node_modules/
+coverage/
+*.pem
+*.key
+.vercel/
+dist/

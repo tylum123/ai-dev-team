@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="vi">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI Dev Team</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body>
+<header><div class="brand"><span class="logo">⌘</span> AI Dev Team <small>LOCAL WORKSPACE</small></div><span id="connection">Đang kết nối…</span></header>
+<main>
+<section class="hero"><p class="eyebrow">CONTEXT FIRST. CODE WITH INTENT.</p><h1>Từ yêu cầu đến<br><em>thay đổi có kiểm chứng.</em></h1><p>Context vừa đủ. Patch nhỏ. Kiểm tra thực tế. Bạn quyết định khi nào đưa thay đổi lên GitHub.</p></section>
+<div class="layout"><aside>
+<form id="task-form"><h2>Tác vụ mới</h2><label for="mode">Chế độ</label><select id="mode"><option value="demo">Demo · không dùng API</option><option value="live">Live · repository GitHub</option></select>
+<label for="repo">Repository</label><input id="repo" placeholder="https://github.com/owner/repository" disabled>
+<label for="prompt">Bạn muốn thay đổi gì?</label><textarea id="prompt" minlength="8" maxlength="4000" required rows="5" placeholder="Ví dụ: sửa màu nút trong public/style.css; giữ nguyên trạng thái hover."></textarea>
+<label for="complexity">Workflow</label><select id="complexity"><option value="auto">Tự chọn theo yêu cầu</option><option value="simple">Đơn giản · Coder + kiểm tra</option><option value="complex">Phức tạp · Planner + Coder + Reviewer</option></select>
+<button id="submit" type="submit">Bắt đầu tác vụ →</button><p class="muted">Tối đa 2 lượt sửa · 6 lần gọi AI.<br>Demo là dữ liệu mẫu, không xử lý yêu cầu thật.</p><p id="error" role="alert"></p></form>
+<section class="history"><h2>Lịch sử</h2><div id="tasks"></div></section>
+</aside><section class="workspace">
+<div class="section-head"><h2>Workspace</h2><span id="status">Chưa có tác vụ</span></div>
+<div id="metrics" class="metrics"></div>
+<p id="task-title" class="muted">Tạo tác vụ để theo dõi context, kiểm tra và diff.</p>
+<div class="pipeline"><span>01 Context</span><span>02 Patch</span><span>03 Validate</span><span>04 Approve</span></div>
+<details open><summary>Context & routing</summary><pre id="context">—</pre></details>
+<details open><summary>Quality gates</summary><div id="gates" class="gates">Chưa chạy kiểm tra.</div></details>
+<details open><summary>Diff</summary><pre id="diff">Chưa có thay đổi.</pre></details>
+<details><summary>Token telemetry</summary><pre id="telemetry">—</pre></details>
+<details><summary>Nhật ký</summary><pre id="events">—</pre></details>
+<div class="approval"><p id="review">Thay đổi chỉ được gửi lên GitHub khi bạn duyệt.</p><button id="publish" disabled>Duyệt diff & tạo draft PR</button><a id="pr" hidden target="_blank" rel="noopener">Mở pull request ↗</a></div>
+</section></div>
+<footer>AI Dev Team / MVP · Local-first · Không tự merge</footer>
+</main></body></html>
