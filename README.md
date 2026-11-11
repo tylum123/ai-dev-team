@@ -19,8 +19,11 @@ Open http://127.0.0.1:4310. Demo uses a fixed sample, no API calls or actual val
 
 ## Live configuration
 
-Copy `.env.example` to `.env` and set `OPENAI_API_KEY` and `OPENAI_MODEL`.
-Optional `OPENAI_MODEL_FAST` and `OPENAI_MODEL_STRONG` override the default for simple/complex tasks. Use model IDs available to your account that support Responses API JSON output.
+In the local dashboard, open **Cấu hình nhà cung cấp AI** and enter the API protocol, base URL (for example `https://api.openai.com/v1`), API key and model ID. Optional fast and strong models override the default for simple/complex tasks. Supported protocols are OpenAI Responses and OpenAI-compatible Chat Completions; the selected endpoint and model must support the requested JSON output. Compatibility varies between providers and has not been verified for every service.
+
+Settings are saved in `.data/provider.json`, including the API key in plaintext on the server's filesystem; `.data` is ignored by Git. Restrict access to that local account and directory. The dashboard never sends the saved key back to the browser; when changing the base URL, re-enter a key. HTTPS is required except for localhost. Configured providers receive task instructions and selected repository content. The static hosted demo does not accept provider credentials or run Live.
+
+Alternatively, copy `.env.example` to `.env` and set `OPENAI_API_KEY` and `OPENAI_MODEL` for OpenAI Responses. Optional `OPENAI_MODEL_FAST` and `OPENAI_MODEL_STRONG` select models by complexity. Saved dashboard settings take precedence over environment values.
 
 Start Docker Desktop and prepare `docker pull node:22-alpine`. Live clones an HTTPS GitHub repository into `.data/` and runs scripts offline inside Docker. The default image supports dependency-free Node repositories. Repositories requiring npm packages need a separately prepared compatible image; the MVP does not install dependencies or enable container network access. Git and `gh` authentication are needed for private repositories and draft PR creation.
 

@@ -31,10 +31,10 @@ export async function runGates(task, dir, root, execute = command) {
   return { passed: gates.some(g => g.name === 'test' && g.status === 'passed') && gates.every(g => ['passed', 'skipped'].includes(g.status)), gates };
 }
 
-export async function runLive(t, { root, data, event, save, execute = command, query = ask, validate = runGates }) {
+export async function runLive(t, { root, data, event, save, execute = command, query = ask, validate = runGates, provider = null }) {
   const dir = path.join(data, t.id);
   t.workspace = dir;
-  t.routing = route(t.prompt, t.complexity);
+  t.routing = route(t.prompt, t.complexity, provider ? { OPENAI_MODEL: provider.model, OPENAI_MODEL_FAST: provider.fastModel, OPENAI_MODEL_STRONG: provider.strongModel } : process.env);
   t.telemetry = [];
   const configuredBudget = process.env.MAX_TASK_COST_USD;
   const budget = configuredBudget ? Number(configuredBudget) : null;
@@ -52,7 +52,7 @@ export async function runLive(t, { root, data, event, save, execute = command, q
     await save();
     const started = Date.now();
     let result;
-    try { result = await query(role, input, t.routing.model); }
+    try { result = provider ? await query(role, input, t.routing.model, fetch, provider) : await query(role, input, t.routing.model); }
     catch (error) {
       t.telemetry.push({ role, round, model: t.routing.model, cost: null, milliseconds: Date.now() - started, error: error.message });
       await save();

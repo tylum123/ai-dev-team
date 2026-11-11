@@ -9,6 +9,7 @@ import { route, applyEdits, retrieve, qualityGates, loadSkills } from '../workfl
 import { runGates, runLive } from '../runner.js';
 import { validateAgentOutput } from '../agents.js';
 import { transition, checkCancellation } from '../task-state.js';
+import { validateProvider, publicProvider, saveProvider, loadProvider } from '../provider-config.js';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -142,6 +143,32 @@ test('API records cache usage, including malformed model output', async () => {
   assert.ok(result.error);
   assert.equal(estimateCost(result.usage, 'unknown'), null);
   assert.equal(estimateCost(result.usage, 'm', { m: { input: 2, cached: 1, output: 5 } }), 0.00025);
+});
+
+test('provider configuration keeps keys private and rejects unsafe changes', async t => {
+  const dir = await fixture(t);
+  const input = { protocol: 'chat_completions', baseUrl: 'https://provider.example/v1', model: 'model-a', apiKey: 'example-key' };
+  const config = await saveProvider(dir, input);
+  assert.equal((await loadProvider(dir)).apiKey, 'example-key');
+  assert.ok(!JSON.stringify(publicProvider(config)).includes('example-key'));
+  assert.equal(validateProvider({ ...input, apiKey: '' }, config).apiKey, 'example-key');
+  assert.throws(() => validateProvider({ ...input, apiKey: '', baseUrl: 'https://other.example/v1' }, config), /API key/);
+  assert.throws(() => validateProvider({ ...input, baseUrl: 'http://remote.example/v1' }), /HTTPS/);
+  assert.throws(() => validateProvider({ ...input, baseUrl: 'https://user:pass@provider.example/v1' }), /HTTPS/);
+});
+
+test('chat-compatible provider sends configured request and records usage', async () => {
+  const provider = { protocol: 'chat_completions', baseUrl: 'https://provider.example/v1', apiKey: 'example-key' };
+  const result = await ask('Planner', { task: 'test' }, 'model-a', async (url, options) => {
+    assert.equal(url, 'https://provider.example/v1/chat/completions');
+    assert.equal(options.redirect, 'error');
+    assert.equal(options.headers.Authorization, 'Bearer example-key');
+    assert.equal(JSON.parse(options.body).messages.length, 2);
+    return { ok: true, json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: '{"paths":[]}' } }], usage: { prompt_tokens: 12, completion_tokens: 3 } }) };
+  }, provider);
+  assert.deepEqual(result.value, { paths: [] });
+  assert.equal(result.tokens, 15);
+  assert.equal(result.usageReported, true);
 });
 
 test('task cost limit stops further calls and records the billed response', async t => {

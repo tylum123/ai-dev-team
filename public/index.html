@@ -6,6 +6,16 @@
 <main>
 <section class="hero"><p class="eyebrow">CONTEXT FIRST. CODE WITH INTENT.</p><h1>Từ yêu cầu đến<br><em>thay đổi có kiểm chứng.</em></h1><p>Context vừa đủ. Patch nhỏ. Kiểm tra thực tế. Bạn quyết định khi nào đưa thay đổi lên GitHub.</p></section>
 <div class="layout"><aside>
+<details id="provider-settings"><summary>Cấu hình nhà cung cấp AI</summary>
+<form id="provider-form">
+<label for="protocol">Giao thức</label><select id="protocol"><option value="responses">OpenAI Responses</option><option value="chat_completions">Chat Completions tương thích OpenAI</option></select>
+<label for="base-url">Base URL</label><input id="base-url" type="url" value="https://api.openai.com/v1" required>
+<label for="api-key">API key</label><input id="api-key" type="password" autocomplete="off" placeholder="Để trống để giữ khóa đã lưu">
+<label for="model">Model mặc định</label><input id="model" required placeholder="ID model của nhà cung cấp">
+<label for="fast-model">Model cho việc đơn giản (tùy chọn)</label><input id="fast-model">
+<label for="strong-model">Model cho việc phức tạp (tùy chọn)</label><input id="strong-model">
+<button type="submit">Lưu cấu hình</button><p class="muted">Khóa lưu cục bộ trên máy chạy server. Base URL là nơi nhận khóa và nội dung tác vụ.</p><p id="provider-message" role="status"></p>
+</form></details>
 <form id="task-form"><h2>Tác vụ mới</h2><label for="mode">Chế độ</label><select id="mode"><option value="demo">Demo · không dùng API</option><option value="live">Live · repository GitHub</option></select>
 <label for="repo">Repository</label><input id="repo" placeholder="https://github.com/owner/repository" disabled>
 <label for="prompt">Bạn muốn thay đổi gì?</label><textarea id="prompt" minlength="8" maxlength="4000" required rows="5" placeholder="Ví dụ: sửa màu nút trong public/style.css; giữ nguyên trạng thái hover."></textarea>

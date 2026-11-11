@@ -1,5 +1,5 @@
 const $ = id => document.getElementById(id);
-let state, selected;
+let state, selected, providerLoaded = false;
 async function request(url, body) {
   if (window.hostedDemo) return window.hostedDemo(url, body);
   const response = await fetch(url, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
@@ -10,11 +10,20 @@ async function request(url, body) {
 function render() {
   $('connection').textContent = state.config.aiReady ? '● API đã cấu hình' : '○ DEMO · chưa cấu hình API';
   if (state.config.hostedDemo) {
+    $('provider-settings').hidden = true;
     $('connection').textContent = 'VERCEL · DEMO ONLY · Không gọi API';
     $('mode').querySelector('option[value="live"]').disabled = true;
     $('mode').title = 'Live cần worker riêng; bản Vercel chỉ minh họa trong trình duyệt.';
     document.querySelector('.brand small').textContent = 'HOSTED DEMO';
     document.querySelector('footer').textContent = 'Vercel Demo · Không xử lý yêu cầu thật · Lịch sử chỉ trong phiên trang này · Live chạy trên worker riêng';
+  }
+  if (!providerLoaded && !state.config.hostedDemo) {
+    if (state.config.protocol) $('protocol').value = state.config.protocol;
+    if (state.config.baseUrl) $('base-url').value = state.config.baseUrl;
+    $('model').value = state.config.model || '';
+    $('fast-model').value = state.config.fastModel || '';
+    $('strong-model').value = state.config.strongModel || '';
+    providerLoaded = true;
   }
   const task = state.tasks.find(t => t.id === selected) || state.tasks[0];
   $('tasks').replaceChildren(...state.tasks.map(t => {
@@ -57,6 +66,17 @@ async function refresh() {
   catch (e) { $('connection').textContent = 'Mất kết nối'; $('error').textContent = e.message; }
 }
 $('mode').onchange = () => { $('repo').disabled = $('mode').value !== 'live'; $('repo').required = $('mode').value === 'live'; };
+$('provider-form').onsubmit = async event => {
+  event.preventDefault();
+  $('provider-message').textContent = '';
+  try {
+    await request('/api/provider', { protocol: $('protocol').value, baseUrl: $('base-url').value, apiKey: $('api-key').value,
+      model: $('model').value, fastModel: $('fast-model').value, strongModel: $('strong-model').value });
+    $('api-key').value = '';
+    $('provider-message').textContent = 'Đã lưu cấu hình. Chưa kiểm tra kết nối tới nhà cung cấp.';
+    await refresh();
+  } catch (e) { $('provider-message').textContent = e.message; }
+};
 $('task-form').onsubmit = async event => {
   event.preventDefault(); $('error').textContent = ''; $('submit').disabled = true;
   try {
