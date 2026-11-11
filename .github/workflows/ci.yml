@@ -19,6 +19,9 @@ jobs:
           node --check core.js
           node --check workflow.js
           node --check runner.js
+          node --check agents.js
+          node --check task-state.js
+          node --check provider-config.js
           node --check public/app.js
           node --check deploy/hosted-demo.js
           node --check scripts/build.mjs

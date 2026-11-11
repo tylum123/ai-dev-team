@@ -1,5 +1,15 @@
 # Linux server deployment
 
+## Free experiment plan
+
+Use an Oracle Cloud Always Free eligible VM only after checking its current eligibility and limits in the Oracle console. A free account may require identity and payment-card verification; never upgrade to a paid account or add paid services as part of this setup without the owner's decision. Always Free capacity may be unavailable and idle instances may be reclaimed. Provider API usage, domain names, backups and any resources outside the free allocation can cost money. See [Oracle Always Free resources](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm).
+
+The initial deployment is for a single trusted operator using an SSH tunnel. It is not a public multi-user backend: authentication, authorization, encrypted credential storage, provider URL protections and hardened isolation must be implemented and tested before connecting the public Vercel dashboard to Live. In particular, `.data/provider.json` currently stores provider keys in plaintext and must not be uploaded to Git or untrusted backups. Do not configure any secrets before the server and access model have been checked.
+
+GitHub Actions runs syntax, tests and the static build on pushes and pull requests. This is validation only: it does not currently deploy the server. Once a server exists, add a restricted deployment credential, verify the exact destination and implement a tested release/rollback mechanism before enabling automatic deployment. Do not allow pull requests from the public repository to execute on a persistent self-hosted runner. GitHub-hosted standard runners for public repositories are free subject to GitHub limits and policy.
+
+Before any real Live task, prepare a compatible Docker image, configure a provider with a deliberate spending limit, and perform an end-to-end test. AI API calls are not included in Oracle's free VM. A budget checked after a provider response cannot guarantee zero spending; use a provider's free allocation and provider-side limits when available, or remain in Demo mode.
+
 This service runs the existing Node backend directly on a dedicated Linux VM. No build or package installation is required for this dependency-free project. Keep port 4310 private: the MVP has no application login or multi-user authorization.
 
 ## Requirements
