@@ -44,4 +44,17 @@ test('local provider endpoint saves settings without returning the API key', asy
   assert.ok(!state.includes(input.apiKey));
   assert.equal(JSON.parse(state).config.model, input.model);
   assert.equal(JSON.parse(await fs.readFile(path.join(dir, '.data', 'provider.json'), 'utf8')).apiKey, input.apiKey);
+  const stopped = new Promise(resolve => child.once('exit', resolve));
+  child.kill();
+  await stopped;
+  child = spawn(process.execPath, ['server.js'], { cwd: dir, env: { ...env, DEMO_ONLY: 'true' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(Error('Server restart timeout')), 10000);
+    child.stdout.once('data', () => { clearTimeout(timer); resolve(); });
+    child.once('exit', code => { clearTimeout(timer); reject(Error(`Server exited ${code}`)); });
+  });
+  const blocked = await fetch(`${base}/api/provider`, { method: 'POST', headers: { Origin: base, 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
+  assert.equal(blocked.status, 403);
+  const live = await fetch(`${base}/api/tasks`, { method: 'POST', headers: { Origin: base, 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'live', prompt: 'a valid task prompt', repo: 'https://github.com/test/repo' }) });
+  assert.equal(live.status, 400);
 });

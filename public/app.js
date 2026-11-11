@@ -9,6 +9,11 @@ async function request(url, body) {
 }
 function render() {
   $('connection').textContent = state.config.aiReady ? '● API đã cấu hình' : '○ DEMO · chưa cấu hình API';
+  if (state.config.demoOnly) {
+    $('mode').querySelector('option[value="live"]').disabled = true;
+    $('mode').title = 'Container này chỉ hỗ trợ Demo; Live cần worker riêng.';
+    $('provider-settings').hidden = true;
+  }
   if (state.config.hostedDemo) {
     $('provider-settings').hidden = true;
     $('connection').textContent = 'VERCEL · DEMO ONLY · Không gọi API';

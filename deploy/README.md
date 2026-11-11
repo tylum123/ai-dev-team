@@ -1,5 +1,19 @@
 # Linux server deployment
 
+## Docker demo on a Linux VPS
+
+The included Docker Compose configuration is a **Demo-only** container. It does not include Git, GitHub CLI, or access to a Docker daemon, and the backend rejects Live tasks and provider settings. It does not mount the host Docker socket. A separate worker architecture and real isolation tests are required before enabling Live.
+
+On a Linux host with Docker Engine and Compose installed, clone the repository, then run:
+
+```sh
+docker compose up -d --build
+docker compose ps
+curl --fail http://127.0.0.1:4310/api/state
+```
+
+The port is bound only to host loopback. On your own computer connect using `ssh -N -L 4310:127.0.0.1:4310 USER@SERVER`, then open `http://127.0.0.1:4310`. Do not expose this unauthenticated app publicly. The named volume `task-data` persists demo task history between container restarts. Avoid `docker compose down -v` if the data should be retained. Build and test on the target VPS before relying on this configuration; it has not yet been validated on a live Docker daemon.
+
 ## Free experiment plan
 
 Use an Oracle Cloud Always Free eligible VM only after checking its current eligibility and limits in the Oracle console. A free account may require identity and payment-card verification; never upgrade to a paid account or add paid services as part of this setup without the owner's decision. Always Free capacity may be unavailable and idle instances may be reclaimed. Provider API usage, domain names, backups and any resources outside the free allocation can cost money. See [Oracle Always Free resources](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm).

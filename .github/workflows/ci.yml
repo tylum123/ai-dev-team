@@ -27,3 +27,15 @@ jobs:
           node --check scripts/build.mjs
       - run: npm test
       - run: npm run build
+      - name: Build and smoke test demo container
+        run: |
+          docker compose up -d --build
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4310/api/state > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          docker compose logs
+          exit 1
+      - name: Remove test container
+        if: always()
+        run: docker compose down --volumes

@@ -60,3 +60,5 @@ Tests use `node:test`, temporary Git repositories and mocked API/container execu
 `AGENTS.md` is preserved as requested; its initial scaffold inventory predates the completed dashboard and tests. This README describes the current state.
 
 See [architecture and limits](docs/architecture.md). Nothing automatically merges a PR.
+
+A Demo-only Docker Compose setup for a Linux VPS is documented in [deploy/README.md](deploy/README.md). It binds to loopback and does not provide a Live worker or Docker daemon access.
