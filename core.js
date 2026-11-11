@@ -56,5 +56,5 @@ export async function ask(role, input, model, fetcher = fetch) {
     if (result.status !== 'completed') throw Error('AI output chưa hoàn tất');
     value = JSON.parse(text);
   } catch (e) { error = e.message; }
-  return { value, usage, tokens: result.usage?.total_tokens || usage.input + usage.output, error };
+  return { value, usage, usageReported: Number.isFinite(result.usage?.input_tokens) && Number.isFinite(result.usage?.output_tokens), tokens: result.usage?.total_tokens || usage.input + usage.output, error };
 }

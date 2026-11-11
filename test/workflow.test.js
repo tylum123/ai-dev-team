@@ -7,8 +7,27 @@ import { fileURLToPath } from 'node:url';
 import { safePath, repoName, command, ask, estimateCost } from '../core.js';
 import { route, applyEdits, retrieve, qualityGates, loadSkills } from '../workflow.js';
 import { runGates, runLive } from '../runner.js';
+import { validateAgentOutput } from '../agents.js';
+import { transition, checkCancellation } from '../task-state.js';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+
+test('task transitions and cancellation are explicit', () => {
+  const task = { status: 'queued' };
+  assert.throws(() => transition(task, 'ready'), /không hợp lệ/);
+  transition(task, 'running');
+  transition(task, 'cancelling');
+  assert.throws(() => checkCancellation(task), { code: 'TASK_CANCELLED' });
+  transition(task, 'cancelled');
+  assert.throws(() => transition(task, 'publishing'), /không hợp lệ/);
+});
+
+test('agent outputs must match role contracts', () => {
+  assert.deepEqual(validateAgentOutput('Planner', { paths: ['x.js'] }), { paths: ['x.js'] });
+  assert.throws(() => validateAgentOutput('Planner', { paths: Array(9).fill('x.js') }), /không hợp lệ/);
+  assert.throws(() => validateAgentOutput('Coder', { edits: [{ path: '../x' }] }), /không hợp lệ/);
+  assert.throws(() => validateAgentOutput('Reviewer', { approved: 'yes' }), /không hợp lệ/);
+});
 async function fixture(t, files = {}) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'devteam-test-'));
   t.after(() => fs.rm(dir, { recursive: true, force: true }));
@@ -31,6 +50,7 @@ test('route simple tasks to fast model and sensitive tasks to strong', () => {
   const env = { OPENAI_MODEL_FAST: 'fast', OPENAI_MODEL_STRONG: 'strong' };
   assert.deepEqual(route('fix css color', 'auto', env), { complexity: 'simple', planner: false, reviewer: false, model: 'fast' });
   assert.equal(route('fix css authentication API', 'auto', env).reviewer, true);
+  assert.equal(route('fix css authentication', 'simple', env).reviewer, true);
 });
 
 test('patches preserve unrelated text and reject ambiguous matches atomically', async t => {
@@ -68,6 +88,20 @@ test('retrieve relevant filenames and direct imports within budget', async t => 
   assert.ok(!context.map.includes('secret.json'));
 });
 
+test('retrieve finds relevant content without exposing protected files', async t => {
+  const dir = await fixture(t, {
+    'src/handler.js': 'export function reconcileInvoice() { return true; }',
+    'src/other.js': 'export const unrelated = true;',
+    'secret.json': 'reconcileInvoice private',
+  });
+  await command('git', ['init'], dir);
+  await command('git', ['add', '.'], dir);
+  const context = await retrieve(dir, 'fix reconcileInvoice');
+  assert.equal(context.files[0].path, 'src/handler.js');
+  assert.ok(!context.files.some(file => file.path === 'secret.json'));
+  assert.ok(context.characters <= 32000);
+});
+
 test('skills load only when relevant', async () => {
   assert.deepEqual(await loadSkills(root, 'rename variable'), []);
   assert.deepEqual((await loadSkills(root, 'fix css')).map(s => s.name), ['frontend', 'testing']);
@@ -87,6 +121,16 @@ test('quality gates skip missing scripts and never pass an empty test suite', as
   assert.equal(result.gates.find(g => g.name === 'test').status, 'empty');
 });
 
+test('unavailable Docker is distinguished from a failed test', async t => {
+  const dir = await fixture(t, { 'package.json': '{"scripts":{"test":"node --test"}}' });
+  const result = await runGates({ id: 'test' }, dir, root, async (bin, args) => {
+    if (args[0] === 'run') throw Error('Cannot connect to the Docker daemon');
+    return '';
+  });
+  assert.equal(result.passed, false);
+  assert.equal(result.gates.find(g => g.name === 'test').status, 'unavailable');
+});
+
 test('API records cache usage, including malformed model output', async () => {
   const result = await ask('Coder', { task: 'test' }, 'configured-model', async (url, options) => {
     const body = JSON.parse(options.body);
@@ -98,6 +142,42 @@ test('API records cache usage, including malformed model output', async () => {
   assert.ok(result.error);
   assert.equal(estimateCost(result.usage, 'unknown'), null);
   assert.equal(estimateCost(result.usage, 'm', { m: { input: 2, cached: 1, output: 5 } }), 0.00025);
+});
+
+test('task cost limit stops further calls and records the billed response', async t => {
+  const original = { ...process.env };
+  t.after(() => {
+    for (const key of ['MAX_TASK_COST_USD', 'MODEL_PRICES_JSON', 'OPENAI_MODEL']) {
+      if (original[key] === undefined) delete process.env[key];
+      else process.env[key] = original[key];
+    }
+  });
+  process.env.MAX_TASK_COST_USD = '0.001';
+  process.env.OPENAI_MODEL = 'budget-test';
+  process.env.MODEL_PRICES_JSON = JSON.stringify({ 'budget-test': { input: 100, cached: 100, output: 100 } });
+  const data = await fixture(t);
+  const dir = path.join(data, 'task');
+  await fs.mkdir(dir);
+  await fs.writeFile(path.join(dir, 'style.css'), 'a { color: red; }');
+  await command('git', ['init'], dir);
+  await command('git', ['add', '.'], dir);
+  const task = { id: 'task', prompt: 'fix css style.css', complexity: 'simple', repo: 'mock', branch: 'ai/task', calls: 0, tokens: 0 };
+  let calls = 0;
+  await assert.rejects(runLive(task, {
+    root, data, save: async () => {}, event: async () => {},
+    execute: async (bin, args, cwd) => {
+      if (['clone', 'checkout'].includes(args[0])) return '';
+      if (args[0] === 'branch') return 'main';
+      return command(bin, args, cwd);
+    },
+    query: async () => {
+      calls++;
+      return { value: { edits: [] }, usage: { input: 10, cached: 0, output: 10 }, tokens: 20 };
+    },
+  }), /giới hạn chi phí/);
+  assert.equal(calls, 1);
+  assert.equal(task.telemetry.length, 1);
+  assert.equal(await fs.readFile(path.join(dir, 'style.css'), 'utf8'), 'a { color: red; }');
 });
 
 for (const passing of [true, false]) {

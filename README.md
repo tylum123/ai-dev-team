@@ -26,6 +26,8 @@ Start Docker Desktop and prepare `docker pull node:22-alpine`. Live clones an HT
 
 `MODEL_PRICES_JSON` optionally maps model IDs to USD per million tokens, e.g. `{"your-model":{"input":1,"cached":0.1,"output":4}}`. These numbers are illustrative, not provider prices. Unknown prices display as unknown. Cache counts come from provider usage, not a guaranteed cache hit.
 
+Optionally set `MAX_TASK_COST_USD` and prices for the selected model to stop after a response reaches the estimated task budget. A single call may exceed the limit and failed requests may incur unknown charges. Local tasks can be cancelled from the dashboard; cancellation takes effect at the next safe boundary, not necessarily immediately during an API call, clone, or Docker gate.
+
 ## Checks
 
 `npm run build` creates a static Vercel dashboard in `dist/`. This online version runs Demo entirely in browser memory (no AI requests, server storage, repository edits or PR publishing). Live remains available through `npm start` on a machine with Docker. The Vercel build disables Live and explicitly labels simulated output. Never configure API keys in static assets.
@@ -47,6 +49,7 @@ Tests use `node:test`, temporary Git repositories and mocked API/container execu
 
 - `workflow.js`: path map, filename ranking, direct-import discovery, bounded retrieval, patch validation, routing, on-demand skills.
 - `runner.js`: optional Planner/Reviewer, two edit rounds, quality gates and per-call usage/cost telemetry.
+- `agents.js`, `task-state.js`: role output validation and allowed task state transitions.
 - `core.js`: process execution, paths, Responses API adapter.
 - `server.js`, `public/`: loopback API, saved tasks and dashboard.
 - `skills/`, `docs/`: focused instructions and architecture decisions.

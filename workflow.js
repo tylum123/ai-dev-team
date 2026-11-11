@@ -5,7 +5,8 @@ import { command, safePath } from './core.js';
 export const limits = { files: 10, characters: 32000, calls: 6, rounds: 2 };
 
 export function route(task, mode = 'auto', env = process.env) {
-  const simple = mode === 'simple' || (mode === 'auto' && /css|typo|spacing|màu|chính tả/i.test(task) && !/auth|security|database|api|payment/i.test(task));
+  const sensitive = /auth|security|database|payment|permission|credential|xác thực|bảo mật|phân quyền|thanh toán|dữ liệu/i.test(task);
+  const simple = !sensitive && (mode === 'simple' || (mode === 'auto' && /css|typo|spacing|màu|chính tả/i.test(task) && !/api/i.test(task)));
   return {
     complexity: simple ? 'simple' : 'complex',
     planner: !simple,
@@ -27,7 +28,9 @@ export async function readSafe(root, name) {
 
 export async function retrieve(root, task, pinned = []) {
   const names = (await command('git', ['ls-files', '-z'], root)).split('\0').filter(Boolean);
-  const terms = task.toLowerCase().match(/[\p{L}\p{N}_./-]{3,}/gu) || [];
+  const ignoredTerms = new Set(['fix', 'the', 'and', 'for', 'with', 'add', 'update', 'change', 'sửa', 'thêm', 'các', 'cho', 'của']);
+  const terms = [...new Set((task.toLowerCase().match(/[\p{L}\p{N}_./-]{3,}/gu) || [])
+    .filter(term => !ignoredTerms.has(term)))].slice(0, 24);
   const candidates = names.filter(name => {
     try { safePath(root, name); } catch { return false; }
     return !/(lock|secret|credential|node_modules|vendor|dist|build)/i.test(name);
@@ -36,12 +39,26 @@ export async function retrieve(root, task, pinned = []) {
     terms.reduce((sum, term) => sum + (name.toLowerCase().includes(term) ? 4 : 0), 0)
     + (pinned.includes(name) ? 100 : 0) + (/^(package.json|AGENTS.md|README.md)$/.test(name) ? 2 : 0),
   })).sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+  // Search a bounded set locally; source is still checked by readSafe before use.
+  const contents = new Map();
+  let scannedCharacters = 0;
+  for (const candidate of ranked.slice(0, 200)) {
+    if (!terms.length || scannedCharacters >= 2000000) break;
+    try {
+      const content = await readSafe(root, candidate.name);
+      scannedCharacters += content.length;
+      contents.set(candidate.name, content);
+      const lower = content.toLowerCase();
+      candidate.score += Math.min(6, terms.reduce((sum, term) => sum + (lower.includes(term) ? 1 : 0), 0));
+    } catch { /* Do not index inaccessible, unsafe, or oversized files. */ }
+  }
+  ranked.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
   const files = [];
   let characters = 0;
   for (const { name, score } of ranked) {
     if (score === 0 || files.length >= limits.files) continue;
     try {
-      const content = await readSafe(root, name);
+      const content = contents.has(name) ? contents.get(name) : await readSafe(root, name);
       if (characters + content.length > limits.characters) continue;
       files.push({ path: name, content });
       characters += content.length;

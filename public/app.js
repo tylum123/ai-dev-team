@@ -23,9 +23,10 @@ function render() {
     button.onclick = () => { selected = t.id; render(); };
     return button;
   }));
-  $('submit').disabled = state.tasks.some(t => ['running', 'queued', 'publishing'].includes(t.status));
+  $('submit').disabled = state.tasks.some(t => ['running', 'queued', 'cancelling', 'publishing'].includes(t.status));
   if (!task) return;
   selected = task.id;
+  $('cancel').disabled = !!state.config.hostedDemo || !['queued', 'running'].includes(task.status);
   $('status').textContent = task.status;
   $('task-title').textContent = task.prompt;
   const telemetry = task.telemetry || [];
@@ -68,6 +69,12 @@ $('publish').onclick = async () => {
   if (!confirm('Đã xem diff? Thao tác này sẽ commit, push branch và tạo draft PR trên GitHub.')) return;
   $('publish').disabled = true;
   try { await request(`/api/tasks/${selected}/publish`, {}); }
+  catch (e) { $('error').textContent = e.message; }
+  await refresh();
+};
+$('cancel').onclick = async () => {
+  $('cancel').disabled = true;
+  try { await request(`/api/tasks/${selected}/cancel`, {}); }
   catch (e) { $('error').textContent = e.message; }
   await refresh();
 };

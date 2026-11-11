@@ -1,6 +1,8 @@
 import path from 'node:path';
 import { command, ask, estimateCost } from './core.js';
 import { retrieve, applyEdits, route, qualityGates, loadSkills, readSafe, limits } from './workflow.js';
+import { validateAgentOutput } from './agents.js';
+import { checkCancellation, transition } from './task-state.js';
 
 export async function runGates(task, dir, root, execute = command) {
   let pkg = {};
@@ -20,7 +22,10 @@ export async function runGates(task, dir, root, execute = command) {
         `cp -R /source /tmp/work && cd /tmp/work && npm run ${gate.name}`,
       ], root, 90000);
       gate.status = gate.name === 'test' && /(?:# tests 0\b|No tests found)/i.test(gate.output) ? 'empty' : 'passed';
-    } catch (e) { gate.status = 'failed'; gate.output = e.message; }
+    } catch (e) {
+      gate.status = /cannot connect to the docker daemon|is the docker daemon running|error during connect|failed to connect to the docker|unable to find image|no such image|docker.*(?:not found|not recognized|enoent)/i.test(e.message) ? 'unavailable' : 'failed';
+      gate.output = e.message;
+    }
     finally { await execute('docker', ['rm', '-f', name], root, 10000).catch(() => {}); }
   }
   return { passed: gates.some(g => g.name === 'test' && g.status === 'passed') && gates.every(g => ['passed', 'skipped'].includes(g.status)), gates };
@@ -31,21 +36,39 @@ export async function runLive(t, { root, data, event, save, execute = command, q
   t.workspace = dir;
   t.routing = route(t.prompt, t.complexity);
   t.telemetry = [];
+  const configuredBudget = process.env.MAX_TASK_COST_USD;
+  const budget = configuredBudget ? Number(configuredBudget) : null;
+  if (budget !== null && (!Number.isFinite(budget) || budget <= 0)) throw Error('MAX_TASK_COST_USD phải là số dương');
+  let prices = {};
+  try { prices = JSON.parse(process.env.MODEL_PRICES_JSON || '{}'); } catch { /* Unknown prices stay unknown. */ }
+  if (budget !== null && estimateCost({ input: 0, cached: 0, output: 0 }, t.routing.model, prices) === null) {
+    throw Error('Cần cấu hình giá model trong MODEL_PRICES_JSON để dùng giới hạn chi phí');
+  }
   const call = async (role, input, round = 0) => {
+    checkCancellation(t);
     if (t.calls >= limits.calls) throw Error('Đã đạt giới hạn 6 lượt AI');
     if (JSON.stringify(input).length > 60000) throw Error('Context vượt giới hạn 60.000 ký tự');
     t.calls++;
     await save();
     const started = Date.now();
-    const result = await query(role, input, t.routing.model);
-    let prices = {};
-    try { prices = JSON.parse(process.env.MODEL_PRICES_JSON || '{}'); } catch { /* Unknown prices stay unknown. */ }
+    let result;
+    try { result = await query(role, input, t.routing.model); }
+    catch (error) {
+      t.telemetry.push({ role, round, model: t.routing.model, cost: null, milliseconds: Date.now() - started, error: error.message });
+      await save();
+      throw error;
+    }
     t.tokens += result.tokens;
     t.telemetry.push({ role, round, model: t.routing.model, ...result.usage, tokens: result.tokens,
-      cost: estimateCost(result.usage, t.routing.model, prices), milliseconds: Date.now() - started, error: result.error });
+      cost: result.usageReported === false ? null : estimateCost(result.usage, t.routing.model, prices), milliseconds: Date.now() - started, error: result.error });
     await save();
+    checkCancellation(t);
+    if (budget !== null && t.telemetry.at(-1).cost === null) throw Error('Không có dữ liệu sử dụng để kiểm soát chi phí; tác vụ đã dừng');
+    if (budget !== null && t.telemetry.reduce((sum, entry) => sum + entry.cost, 0) >= budget) {
+      throw Error('Đã đạt giới hạn chi phí ước tính của tác vụ; dừng trước lượt AI tiếp theo');
+    }
     if (result.error) throw Error(result.error);
-    return result.value;
+    return validateAgentOutput(role, result.value);
   };
   await execute('git', ['clone', '--depth', '1', '--', t.repo, dir], root);
   t.base = (await execute('git', ['branch', '--show-current'], dir)).trim();
@@ -73,6 +96,8 @@ export async function runLive(t, { root, data, event, save, execute = command, q
     t.diff = await execute('git', ['diff', '--cached', '--no-ext-diff'], dir);
     await event(t, 'Quality gates', 'Chạy các script đã cấu hình trong Docker offline.');
     t.test = await validate(t, dir, root);
+    checkCancellation(t);
+    if (t.test.gates.some(g => g.status === 'unavailable')) throw Error('Docker hoặc image không khả dụng; hãy kiểm tra môi trường trước khi chạy lại.');
     const gateSummary = { passed: t.test.passed, gates: t.test.gates.map(g => ({ ...g, output: g.output?.slice(0, 1800), truncated: (g.output?.length || 0) > 1800 })) };
     if (t.test.passed && t.diff.trim()) {
       if (t.routing.reviewer) {
@@ -81,7 +106,7 @@ export async function runLive(t, { root, data, event, save, execute = command, q
         t.review = await call('Reviewer', { task: t.prompt, diff: t.diff, test: gateSummary }, round);
       } else t.review = { approved: null, summary: 'Bỏ qua AI Reviewer cho task đơn giản; cần bạn xem diff.' };
       if (!t.routing.reviewer || t.review?.approved === true) {
-        t.status = 'ready';
+        transition(t, 'ready');
         await event(t, 'Approval', 'Chờ bạn xem diff và chủ động tạo draft PR.');
         return;
       }
@@ -89,6 +114,7 @@ export async function runLive(t, { root, data, event, save, execute = command, q
     feedback = { test: gateSummary, review: t.review };
     selected = await retrieve(dir, t.prompt, t.context.paths);
   }
-  t.status = 'needs_changes';
+  checkCancellation(t);
+  transition(t, 'needs_changes');
   await event(t, 'System', 'Đã dừng sau 2 lượt; cần xem lỗi và điều chỉnh yêu cầu.');
 }
